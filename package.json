@@ -1,0 +1,25 @@
+{
+  "name": "solp",
+  "version": "0.0.1",
+  "description": "The solidity macro preprocessor",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bgrusnak/solp.git"
+  },
+  "keywords": [
+    "solidity",
+    "macro",
+    "preprocessor",
+    "macros"
+  ],
+  "author": "Ilya A. Shlyakhovoy",
+  "license": "GPL-3.0-or-later",
+  "bugs": {
+    "url": "https://github.com/bgrusnak/solp/issues"
+  },
+  "homepage": "https://github.com/bgrusnak/solp#readme"
+}
