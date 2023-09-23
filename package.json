@@ -3,6 +3,7 @@
   "version": "0.0.1",
   "description": "The solidity macro preprocessor",
   "main": "src/index.js",
+  "bin": "src/solp",
   "scripts": {
     "test": "./node_modules/.bin/mocha tests/**/*.test.js --reporter spec"
   },
@@ -18,6 +19,9 @@
   ],
   "author": "Ilya A. Shlyakhovoy",
   "license": "GPL-3.0-or-later",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "bugs": {
     "url": "https://github.com/bgrusnak/solp/issues"
   },
@@ -25,5 +29,9 @@
   "devDependencies": {
     "dotenv": "^16.3.1",
     "mocha": "^10.2.0"
+  },
+  "dependencies": {
+    "commander": "^11.0.0",
+    "solc": "^0.8.21"
   }
 }

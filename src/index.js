@@ -8,14 +8,12 @@ const macros = require("./macros");
 const defaultConfig = {
     processEnv: true,
     macroPrefix: "#",
-    // stringQuotes: [ '\'', '"', '`' ],
     singleLineComment: /^\s*\/\//,
     multiLineComment: {
         start: /^\s*\/\*+/,
         row: /^\s*\*+/,
         end: /\s*\*+\/\s*$/,
     },
-    // singleLine: true,
     trimSingleLine: true,
 };
 
@@ -25,11 +23,11 @@ module.exports = class Macro {
     macros = [];
     preliminary = [];
     constructor(newConfig) {
-        this.macros = macros.filter((item) => !item.preliminary);
-        this.preliminary = macros.filter((item) => item.preliminary);
-        this.config.processEnv = newConfig && newConfig.processEnv!==undefined
-            ? !!newConfig.processEnv
-            : defaultConfig.processEnv;
+        this.macros = macros.sort((a, b) => b.order - a.order);
+        this.config.processEnv =
+            newConfig && newConfig.processEnv !== undefined
+                ? !!newConfig.processEnv
+                : defaultConfig.processEnv;
         this.config.macroPrefix =
             (newConfig && newConfig.macroPrefix) || defaultConfig.macroPrefix;
         // this.config.stringQuotes = newConfig.stringQuotes || defaultConfig.stringQuotes;
@@ -40,9 +38,10 @@ module.exports = class Macro {
             (newConfig && newConfig.multiLineComment) ||
             defaultConfig.multiLineComment;
         // this.config.singleLine = newConfig.singleLine || defaultConfig.singleLine;
-        this.config.trimSingleLine = newConfig && newConfig.trimSingleLine!==undefined
-            ? !!newConfig.trimSingleLine
-            : defaultConfig.trimSingleLine;
+        this.config.trimSingleLine =
+            newConfig && newConfig.trimSingleLine !== undefined
+                ? !!newConfig.trimSingleLine
+                : defaultConfig.trimSingleLine;
         if (this.config.processEnv) {
             const envKeys = Object.keys(process.env);
             envKeys.forEach((key) => {
@@ -102,19 +101,24 @@ module.exports = class Macro {
                 [multiline] = line.split(/\\$/);
                 return;
             }
-            // if the line starts from the prefix we need to test the preliminary macros
+            // if the line starts from the prefix we need to test the macros with order < 0
             if (line.search(this.config.macroPrefix) == 0) {
                 const trimmed = line.substr(this.config.macroPrefix.length);
-                const newLine = this.parseMacros(this.preliminary, trimmed);
+                const newLine = this.parseMacros(trimmed, -99, -1);
                 if (newLine !== trimmed) line = newLine;
+            }
+            // else return the line to the original view if it is not a multiline macro
+            else if (multiLine.length == 0) {
+                line = origin;
             }
             // process the line before searching for macros
             line = this.processLine(line);
             // if the line starts from the prefix
             if (line.search(this.config.macroPrefix) == 0) {
                 line = this.parseMacros(
-                    this.macros,
-                    line.substr(this.config.macroPrefix.length)
+                    line.substr(this.config.macroPrefix.length),
+                    1,
+                    99
                 );
             }
             // do not push empty line if it defined in config
@@ -127,14 +131,18 @@ module.exports = class Macro {
     processLine(line) {
         const keys = Object.keys(this.context.variables);
         keys.forEach((variable) => {
-            if (line.search(new RegExp(variable)) > -1)
+            while (line.search(new RegExp(variable)) > -1) {
                 line = this.context.variables[variable](line);
+            }
         });
         return line;
     }
 
-    parseMacros(macros, line) {
-        const macro = macros.find(
+    parseMacros(line, fromCount, toCount) {
+        const reduced = this.macros.filter(
+            ({ order }) => order >= fromCount && order <= toCount
+        );
+        const macro = reduced.find(
             ({ token }) => line.search(new RegExp(`^${token}\\s`)) == 0
         );
         if (!macro) return line;

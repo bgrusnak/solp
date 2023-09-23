@@ -1,0 +1,173 @@
+#! /usr/bin/env node
+const { Command } = require("commander");
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
+const Macro = require("./index.js");
+const program = new Command();
+const solc = require("solc");
+const translate = require("solc/translate");
+program
+    .name("solp")
+    .description("Soidity macro preprocessor using C-style macros")
+    .version("0.0.1")
+    .option(
+        "-c, --config <config-file>",
+        "Use another config file instead solp.config.js",
+        "solp.config.js"
+    )
+    .option(
+        "-o, --output-dir <output-directory>",
+        "Output directory for the processed contracts.",
+        "build"
+    )
+    .option("--base-path <path>", "Root of the project source tree.", "")
+    .option("--env <filename>", "Environment file.", ".env");
+
+program.parse(process.argv);
+const options = program.opts();
+
+require("dotenv").config({ path: path.resolve(options.env) });
+
+const config = require(path.resolve(options.config));
+
+const files = program.args;
+const destination = path.join(options.outputDir, options.basePath);
+
+function abort(msg) {
+    console.error(msg || "Error occurred");
+    process.exit(1);
+}
+
+function readFile(sourcePath) {
+    const prefixedSourcePath = path.resolve(sourcePath);
+    if (fs.existsSync(prefixedSourcePath)) {
+        try {
+            return {
+                content: fs.readFileSync(prefixedSourcePath).toString("utf8"),
+            };
+        } catch (e) {
+            return {
+                error: "Error reading " + prefixedSourcePath + ": " + e,
+            };
+        }
+    }
+    return {
+        error: `File ${prefixedSourcePath} not found inside the base path or any of the include paths.`,
+    };
+}
+
+function withUnixPathSeparators(filePath) {
+    // On UNIX-like systems forward slashes in paths are just a part of the file name.
+    if (os.platform() !== "win32") {
+        return filePath;
+    }
+    return filePath.replace(/\\/g, "/");
+}
+
+function makeSourcePathRelativeIfPossible(sourcePath) {
+    const absoluteBasePath = options.basePath
+        ? path.resolve(options.basePath)
+        : path.resolve(".");
+    const absoluteIncludePaths = options.includePath
+        ? options.includePath.map((prefix) => {
+              return path.resolve(prefix);
+          })
+        : [];
+
+    // Compared to base path stripping logic in solc this is much simpler because path.resolve()
+    // handles symlinks correctly (does not resolve them except in work dir) and strips .. segments
+    // from paths going beyond root (e.g. `/../../a/b/c` -> `/a/b/c/`). It's simpler also because it
+    // ignores less important corner cases: drive letters are not stripped from absolute paths on
+    // Windows and UNC paths are not handled in a special way (at least on Linux). Finally, it has
+    // very little test coverage so there might be more differences that we are just not aware of.
+    const absoluteSourcePath = path.resolve(sourcePath);
+
+    for (const absolutePrefix of [absoluteBasePath].concat(
+        absoluteIncludePaths
+    )) {
+        const relativeSourcePath = path.relative(
+            absolutePrefix,
+            absoluteSourcePath
+        );
+
+        if (!relativeSourcePath.startsWith("../")) {
+            return withUnixPathSeparators(relativeSourcePath);
+        }
+    }
+
+    // File is not located inside base path or include paths so use its absolute path.
+    return withUnixPathSeparators(absoluteSourcePath);
+}
+
+function readDir(filePath, extension = ".sol") {
+    return fs
+        .readdirSync(filePath, { recursive: true })
+        .reduce((files, file) => {
+            if (fs.lstatSync(path.join(filePath, file)).isDirectory())
+                return [...files, ...readDir(path.join(filePath, file))];
+            return [...files, path.join(filePath, file)];
+        }, [])
+        .filter((file) => path.extname(file).toLowerCase() === extension);
+}
+
+if (files.length == 0) {
+    files.push(...readDir(path.resolve(options.basePath)));
+}
+
+function writeFile(file, content) {
+    file = path.join(destination, file);
+    fs.writeFile(file, content, function (err) {
+        if (err) {
+            console.error("Failed to write " + file + ": " + err);
+        }
+    });
+}
+
+const errors = [];
+
+const sources = files.reduce((src, file) => {
+    const readed = readFile(file);
+    if (readed.error) {
+        errors.push(readed.error);
+        return src;
+    }
+    const macro = new Macro(config);
+    src[path.basename(file)] = {
+        content: macro.parse(readed.content),
+    };
+    return src;
+}, {});
+
+const input = {
+    language: "Solidity",
+    sources,
+    settings: {
+        outputSelection: {
+            "*": {
+                "*": ["*"],
+            },
+        },
+    },
+};
+
+const compiled = JSON.parse(solc.compile(JSON.stringify(input)));
+
+if (compiled.errors) {
+    errors.push(
+        ...compiled.errors.map(({ formattedMessage }) => formattedMessage)
+    );
+    console.log(errors.join("\n"));
+    process.exit(1);
+}
+
+fs.mkdirSync(destination, { recursive: true });
+
+Object.keys(compiled.contracts).map((item) => {
+    Object.keys(compiled.contracts[item]).map((itemName) => {
+        writeFile(
+            `${itemName}.json`,
+            JSON.stringify(compiled.contracts[item][itemName], null, 2)
+        );
+    });
+});

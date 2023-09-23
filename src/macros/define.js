@@ -55,6 +55,7 @@ function extractVars(line) {
 
 module.exports = {
     token: "define",
+    order: 1, // positive orders call after the line processing, negative before
     action: (context, row) => {
         const [, name, params, content] = row.match(/(\w*) ?(\(.*\))? ?(.*)/);
         if (!params) {
