@@ -1,6 +1,6 @@
 {
   "name": "@bgrusnak/solp",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "The solidity macro preprocessor",
   "main": "src/index.js",
   "bin": {
