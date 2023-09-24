@@ -8,15 +8,15 @@ const macro = new Macro();
 const parsed = macro.parse(text);
 describe("Define", function () {
   it("Should set variable", function () {
-    assert(macro.context.variables.PI != undefined);
+    assert(macro.context.variables['\\bPI\\b'] != undefined);
   });
   it("Should process variable", function () {
-    assert.equal(macro.parse("PI"), "3.1415");
+    assert.equal(macro.parse("PI").content, "3.1415");
   });
   it("Should set function", function () { 
     assert(macro.context.variables['MAXs*\\((.*?)\\)'] != undefined);
   });
   it("Should process function", function () {
-    assert.equal(parsed, 'const foo = (3.1415 >= "ba)r" ? 3.1415 : "ba)r") + 10');
+    assert.equal(parsed.content, 'const foo = (3.1415 >= "ba)r" ? 3.1415 : "ba)r") + 10');
   });
 });

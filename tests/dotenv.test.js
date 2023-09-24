@@ -5,6 +5,6 @@ const Macro = require('../src/index.js');
 describe('Dotenv', function () {
     it('Should have .env variable', function () {
       const macro = new Macro();
-      assert.equal(macro.parse("TESTVAR TESTVAR!"), "The test value TESTVAR!");
+      assert.equal(macro.parse("TESTVAR TESTVARVAR").content, "The test value TESTVARVAR");
     });
 });

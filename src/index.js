@@ -1,5 +1,5 @@
 /*
- * @Author: bgrusnak@inbox.com
+ * @Author: bulgarus@inbox.ru
  * @Date: 2023-09-20
  */
 const assert = require("assert");
@@ -45,8 +45,11 @@ module.exports = class Macro {
         if (this.config.processEnv) {
             const envKeys = Object.keys(process.env);
             envKeys.forEach((key) => {
-                this.context.variables[key] = (row) =>
-                    row.replace(key, process.env[key]);
+                this.context.variables[`\\b${key}\\b`] = (row) =>
+                    row.replaceAll(
+                        new RegExp(`\\b${key}\\b`, "g"),
+                        process.env[key]
+                    );
             });
         }
     }
@@ -54,12 +57,17 @@ module.exports = class Macro {
     parse(text) {
         const lines = text.split("\n");
         const parsed = [];
+        const errors = [];
         let isCommented = false;
         let multiLine = "";
         lines.forEach((line) => {
             const origin = line;
             line = line.trimLeft();
-            if (line.length == 0) {
+            if (
+                line.length == 0 &&
+                this.context.stack.length > 0 &&
+                this.context.stack[this.context.stack.length - 1]
+            ) {
                 parsed.push(origin);
                 return;
             }
@@ -103,29 +111,56 @@ module.exports = class Macro {
             }
             // if the line starts from the prefix we need to test the macros with order < 0
             if (line.search(this.config.macroPrefix) == 0) {
-                const trimmed = line.substr(this.config.macroPrefix.length);
-                const newLine = this.parseMacros(trimmed, -99, -1);
-                if (newLine !== trimmed) line = newLine;
+                try {
+                    const trimmed = line.substr(this.config.macroPrefix.length);
+                    const newLine = this.parseMacros(trimmed, -99, -1);
+                    if (newLine !== trimmed) line = newLine;
+                } catch (e) {
+                    errors.push(e);
+                    parsed.push(origin);
+                    return;
+                }
             }
             // else return the line to the original view if it is not a multiline macro
             else if (multiLine.length == 0) {
                 line = origin;
             }
             // process the line before searching for macros
-            line = this.processLine(line);
+            try {
+                line = this.processLine(line);
+            } catch (e) {
+                errors.push(e);
+                parsed.push(origin);
+                return;
+            }
+
             // if the line starts from the prefix
             if (line.search(this.config.macroPrefix) == 0) {
-                line = this.parseMacros(
-                    line.substr(this.config.macroPrefix.length),
-                    1,
-                    99
-                );
+                try {
+                    line = this.parseMacros(
+                        line.substr(this.config.macroPrefix.length),
+                        1,
+                        99
+                    );
+                } catch (e) {
+                    errors.push(e);
+                    parsed.push(origin);
+                    return;
+                }
             }
+            // if stack has display:false  on it's head after all parses -> skip the line
+            if (
+                this.context.stack.length > 0 &&
+                !this.context.stack[this.context.stack.length - 1].display
+            )
+                return;
             // do not push empty line if it defined in config
             if (this.config.trimSingleLine && line.length == 0) return;
             parsed.push(line);
         });
-        return parsed.join("\n");
+        const ret = { content: parsed.join("\n") };
+        if (errors.length > 0) ret.error = errors.join("\n");
+        return ret;
     }
 
     processLine(line) {
@@ -139,22 +174,29 @@ module.exports = class Macro {
     }
 
     parseMacros(line, fromCount, toCount) {
+        const variables = this.context.variables;
         const reduced = this.macros.filter(
             ({ order }) => order >= fromCount && order <= toCount
         );
         const macro = reduced.find(
-            ({ token }) => line.search(new RegExp(`^${token}\\s`)) == 0
+            ({ token }) => line.search(new RegExp(`^${token}\\b`)) == 0
         );
         if (!macro) return line;
-        if (macro) {
-            const [, row] = line.split(new RegExp(`^${macro.token}\\s`));
-            const ctx = macro.action(this.context, row);
-            assert(
-                ctx !== undefined,
-                `#${macro.token} not returns context in "${row}"`
-            );
-            this.context = ctx;
-            return "";
+        const [, row] = line.split(new RegExp(`^${macro.token}\\s`));
+        const ctx = macro.action(this.context, row);
+        assert(
+            ctx !== undefined,
+            `#${macro.token} not returns context in "${row}"`
+        ); 
+        // if we have filled stack, we can change the variables only if display:true on the top of the stack
+        if (
+            ctx.stack.length > 0 &&
+            !ctx.stack[this.context.stack.length - 1].display
+        ) {
+            this.context = { variables, stack: ctx.stack };
+            return line;
         }
+        this.context = ctx;
+        return "";
     }
 };

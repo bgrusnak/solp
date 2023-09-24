@@ -9,6 +9,6 @@ const macro = new Macro({processEnv:false});
 const parsed = macro.parse(text); 
 describe("Undef", function () {
   it("Should not find variable after undef", function () {
-    assert.equal(parsed, '3.1415\nPI');
+    assert.equal(parsed.content, '3.1415\nPI');
   });
 });

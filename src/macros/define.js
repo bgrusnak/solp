@@ -1,5 +1,5 @@
 /*
- * @Author: bgrusnak@inbox.com
+ * @Author: bulgarus@inbox.ru
  * @Date: 2023-09-20
  */
 
@@ -58,12 +58,24 @@ module.exports = {
     order: 1, // positive orders call after the line processing, negative before
     action: (context, row) => {
         const [, name, params, content] = row.match(/(\w*) ?(\(.*\))? ?(.*)/);
+        // if (!!variables[`\\b${name}\\b`]) throw new error(`Variable ${name} already defined`)
         if (!params) {
-            context.variables[name] = (row) => row.replace(name, content);
-            return context;
+            /*             variables = (row) =>
+                row.replaceAll(new RegExp(`\\b${name}\\b`, "g"), content);
+ */ return {
+                ...context,
+                variables: {
+                    ...context.variables,
+                    [`\\b${name}\\b`]: (row) =>
+                        row.replaceAll(
+                            new RegExp(`\\b${name}\\b`, "g"),
+                            content
+                        ),
+                },
+            };
         }
         var items = params.match(/(\w*)/g).filter((i) => i != "");
-        context.variables[`${name}\s*\\((.*?)\\)`] = (row) => {
+        const fun = (row) => {
             const [pre] = row.match(name + "\\s*\\(");
             const start = row.search(name + "\\s*\\(");
             const [len, data] = extractVars(row.substr(start + pre.length));
@@ -79,6 +91,9 @@ module.exports = {
             );
             return before + out + after;
         };
-        return context;
+        return {
+            ...context,
+            variables: { ...context.variables, [`${name}\s*\\((.*?)\\)`]: fun },
+        };
     },
 };

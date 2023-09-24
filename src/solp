@@ -133,9 +133,12 @@ const sources = files.reduce((src, file) => {
         return src;
     }
     const macro = new Macro(config);
-    src[path.basename(file)] = {
-        content: macro.parse(readed.content),
-    };
+    const parsed = macro.parse(readed.content);
+    if (parsed.error) {
+        errors.push(parsed.error)
+        return;
+    }
+    src[path.basename(file)] = {content: parsed.content};
     return src;
 }, {});
 
